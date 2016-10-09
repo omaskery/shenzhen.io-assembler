@@ -255,6 +255,9 @@ def write_out(instructions, path):
     takes a collection of instructions and writes them out to a file
     as specified by the path argument
     """
+
+    # TODO: compress label names to be single lettes etc?
+
     output = open(path, 'w')
     for inst in instructions:
         tokens = [
@@ -393,6 +396,10 @@ def assemble(lines: [str], chip: ChipInfo) -> [Instruction]:
         # finally record the assembled/translated instruction
         output.append(assembled)
 
+    # TODO: detect unused code?
+    # TODO: detect unused aliases/constants?
+    # TODO: optimisation pass?
+
     # now we know how many lines of assembly we're generating, will it fit on the chip?
     if len(output) > chip.memory:
         print("warning: program size exceeds chip memory ({} > {})".format(
@@ -412,6 +419,8 @@ def assemble_instruction(symbols: typing.Dict[str, Symbol], chip: ChipInfo, inst
     :return: the instruction after any transformations have been applied
     """
     args = []
+
+    # TODO: accumulate labels in here, then merge repeated labels?
 
     # replace all symbols with their value
     for given_arg, expected_Type in zip(inst.args, inst_info.argtypes):
@@ -550,6 +559,10 @@ def read_lines(file) -> [(int, str)]:
     :param file: the file handle to read lines from
     :return: a collection of tuples describing lines of text and their source position
     """
+
+    # TODO: implement preprocessor here and perform textual import?
+    # TODO: change line number to be "source position", including filename
+
     return [
         (number, line.strip())
         for number, line in enumerate(file.readlines(), start=1)
@@ -583,6 +596,7 @@ def get_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+# TODO: don't use exceptions for errors, accumulate them and only stop when forced?
 class AssemblerException(Exception):
     """custom exception class so that we only catch our own, not internal fatal ones"""
 
