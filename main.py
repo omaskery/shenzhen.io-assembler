@@ -1,16 +1,27 @@
 from collections import OrderedDict
 from collections import namedtuple
+from itertools import zip_longest
 import argparse
 import typing
 
 
 ChipInfo = namedtuple('ChipInfo', 'registers memory')
 RegisterInfo = namedtuple('RegisterInfo', 'name type')
-Symbol = namedtuple('Symbol', 'lineno name value')
+Symbol = namedtuple('Symbol', 'source_pos name value')
 InstructionInfo = namedtuple('InstructionInfo', 'mneumonic argtypes')
+LineOfSource = namedtuple('LineOfSource', 'pos text')
 
 
-class Instruction(namedtuple('Instruction', 'lineno label condition mneumonic args')):
+class SourcePosition(namedtuple('SourcePosition', 'file line')):
+
+    def __str__(self):
+        return "{}:{}".format(
+            self.file,
+            self.line
+        )
+
+
+class Instruction(namedtuple('Instruction', 'source_pos label condition mneumonic args')):
 
     def replace(self, **kwargs):
         return self._replace(**kwargs)
@@ -243,7 +254,7 @@ def main():
             verbose("    {} ({})".format(
                 reg, chip.registers[reg].type
             ))
-        lines = read_lines(args.input)
+        lines = read_lines(args.input, args.input.name)
         assembled = assemble(lines, chip)
         write_out(assembled, args.output)
     except AssemblerException as ex:
@@ -293,7 +304,7 @@ def verbose_off(*args, **kwargs):
 verbose = verbose_off
 
 
-def assemble(lines: [str], chip: ChipInfo) -> [Instruction]:
+def assemble(lines: [LineOfSource], chip: ChipInfo) -> [Instruction]:
     """
     takes lines of text from a source file, parses them as instructions and
     produces a list of output instructions in the format SHENZHEN I/O expects
@@ -340,25 +351,25 @@ def assemble(lines: [str], chip: ChipInfo) -> [Instruction]:
         info = INSTRUCTIONS.get(inst.mneumonic, None)
         if info is None:
             raise AssemblerException(
-                inst.lineno,
+                inst.source_pos,
                 "unknown instruction mneumonic: {}".format(
                     inst.mneumonic
                 )
             )
 
         # validate the arguments
-        for given_arg, expected_type in zip(inst.args, info.argtypes):
+        for given_arg, expected_type in zip_longest(inst.args, info.argtypes):
             # ensure the right number of arguments are provided
             if given_arg is None:
                 raise AssemblerException(
-                    inst.lineno,
+                    inst.source_pos,
                     "too few arguments to {} instruction".format(
                         inst.mneumonic
                     )
                 )
             if expected_type is None:
                 raise AssemblerException(
-                    inst.lineno,
+                    inst.source_pos,
                     "too many arguments to {} instruction".format(
                         inst.mneumonic
                     )
@@ -423,7 +434,7 @@ def assemble_instruction(symbols: typing.Dict[str, Symbol], chip: ChipInfo, inst
     # TODO: accumulate labels in here, then merge repeated labels?
 
     # replace all symbols with their value
-    for given_arg, expected_Type in zip(inst.args, inst_info.argtypes):
+    for given_arg, expected_Type in zip_longest(inst.args, inst_info.argtypes):
         # TODO: check references to registers are valid on current chip
         if given_arg in symbols:
             args.append(symbols[given_arg].value)
@@ -455,7 +466,7 @@ def symbol_pass(instructions: [Instruction], chip: ChipInfo):
         # check we have enough arguments
         if len(inst.args) < 2:
             raise AssemblerException(
-                inst.lineno,
+                inst.source_pos,
                 "expected two arguments to {}: name and value".format(
                     inst.mneumonic
                 )
@@ -466,16 +477,16 @@ def symbol_pass(instructions: [Instruction], chip: ChipInfo):
 
         if name in result:
             raise AssemblerException(
-                inst.lineno,
+                inst.source_pos,
                 "redefinition of symbol '{}', previously declared here: {}".format(
-                    name, result[name].lineno
+                    name, result[name].source_pos
                 )
             )
 
         # ensure that the name of the alias/const isn't going to collide with any register names!
         if chip.registers.get(name, None):
             raise AssemblerException(
-                inst.lineno,
+                inst.source_pos,
                 "cannot use {} as an {} name, reserved as a register name on this chip".format(
                     name, inst.mneumonic
                 )
@@ -484,7 +495,7 @@ def symbol_pass(instructions: [Instruction], chip: ChipInfo):
         # ensure that any aliases actually refer to real registers!
         if inst.mneumonic == FAKE_OP_ALIAS and chip.registers.get(value, None) is None:
             raise AssemblerException(
-                inst.lineno,
+                inst.source_pos,
                 "{} is an invalid alias as '{}' is not a valid register name on this chip".format(
                     name, value
                 )
@@ -495,14 +506,14 @@ def symbol_pass(instructions: [Instruction], chip: ChipInfo):
             name, inst.mneumonic, value
         ))
         result[name] = Symbol(
-            lineno=inst.lineno,
+            source_pos=inst.source_pos,
             name=name,
             value=value
         )
     return result
 
 
-def parse_lines(lines: [str]) -> [Instruction]:
+def parse_lines(lines: [LineOfSource]) -> [Instruction]:
     """
     takes a collection of lines and parses them into instructions
     :param lines: the lines to parse
@@ -519,13 +530,14 @@ def parse_lines(lines: [str]) -> [Instruction]:
     )
 
 
-def parse_line(line: str) -> Instruction:
+def parse_line(line: LineOfSource) -> Instruction:
     """
     parses a single line into an assembly instruction
     :param line: the line to parse
     :return: an instruction object parsed from the given line
     """
-    number, text = line
+
+    text = line.text
 
     # remove comments
     comment_start = text.find("#")
@@ -537,8 +549,8 @@ def parse_line(line: str) -> Instruction:
     if not text:
         return None
 
-    # parse by spaces
-    tokens = text.split(" ")
+    # parse by spaces, the list comprehension is to remove empty strings when double spacing etc is used
+    tokens = [token for token in text.split(" ") if token]
     label, condition, mneumonic, args = None, None, None, None
     # label?
     if tokens[0].endswith(":"):
@@ -555,26 +567,26 @@ def parse_line(line: str) -> Instruction:
             args = tokens[1:]
     if condition is not None and mneumonic is None:
         raise AssemblerException(
-            number,
+            line.pos,
             "condition symbol '{}' found with no associated instruction?".format(
                 condition
             )
         )
-    return Instruction(number, label, condition, mneumonic, args)
+    return Instruction(line.pos, label, condition, mneumonic, args)
 
 
-def read_lines(file) -> [(int, str)]:
+def read_lines(file, path: str) -> [LineOfSource]:
     """
     reads all the lines from a file and matches them up with their source position
     :param file: the file handle to read lines from
+    :param path: the path to the file being read
     :return: a collection of tuples describing lines of text and their source position
     """
 
     # TODO: implement preprocessor here and perform textual import?
-    # TODO: change line number to be "source position", including filename
 
     return [
-        (number, line.strip())
+        LineOfSource(SourcePosition(path, number), line.strip())
         for number, line in enumerate(file.readlines(), start=1)
     ]
 
@@ -610,13 +622,13 @@ def get_args() -> argparse.Namespace:
 class AssemblerException(Exception):
     """custom exception class so that we only catch our own, not internal fatal ones"""
 
-    def __init__(self, lineno, message):
+    def __init__(self, source_pos, message):
         """
         constructor
-        :param lineno: the source position of the error
+        :param source_pos: the source position of the error
         :param message: a description of the failure
         """
-        super().__init__("[line {}]: {}".format(lineno, message))
+        super().__init__("[{}]: {}".format(source_pos, message))
 
 
 if __name__ == "__main__":

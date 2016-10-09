@@ -30,6 +30,7 @@ The assembly used is almost entirely identical to that in SHENZHEN.IO, the synta
 - [ ] Detect and remove redundant labels?
 - [x] Error on redefinitions of alias/const names
 - [ ] Add support for including other files textually (preprocessor style)
-- [ ] Improve error reporting to use source file and source line
+- [x] Improve error reporting to use source file and source line
 - [ ] Make errors accumulate and prevent output, rather than immediate abort?
+- [ ] Make constants evaluate simple expressions?
 
