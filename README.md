@@ -26,4 +26,6 @@ The assembly used is almost entirely identical to that in SHENZHEN.IO, the synta
 - [ ] Basic optimisation (probably not?)
 - [ ] Detect unused code (possibly not?)
 - [ ] Detect unused aliases/constants?
+- [ ] Compress label names
+- [ ] Detect and remove redundant labels?
 
