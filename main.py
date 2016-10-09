@@ -570,7 +570,7 @@ def parse_line(line: LineOfSource) -> Instruction:
     text = line.text
 
     # remove comments
-    comment_start = text.find(";")
+    comment_start = text.find("#")
     if comment_start != -1:
         text = text[:comment_start]
     text = text.strip()
@@ -621,7 +621,7 @@ def read_lines(file, path: str, included_files: [str]) -> [LineOfSource]:
         line = line.strip()
 
         # handle preprocessor logic here (refactor elsewhere? :/)
-        if line.startswith("#include"):
+        if line.startswith("!include"):
             # split the include into its directive and the included path
             tokens = line.split(maxsplit=1)
             if len(tokens) < 1:
@@ -677,7 +677,7 @@ def read_lines(file, path: str, included_files: [str]) -> [LineOfSource]:
                 read_lines(handle, included_path, included_files)
             )
         # this line looks like a preprocessor directive, but we can't handle it
-        elif line.startswith("#"):
+        elif line.startswith("!"):
             print("warning [{}]: unknown preprocessor directive '{}'".format(
                 pos, line.split(maxsplit=1)[0][1:]
             ))

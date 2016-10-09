@@ -1,9 +1,11 @@
 
 # Overview
 
-This is just a silly tool to make it easier to write assembly for the microprocessors in SHENZHEN I/O, an awesome programming game released recently by Zachtronics.
+This is just a silly tool to make it easier to write assembly for the microprocessors in SHENZHEN I/O,
+an awesome programming game released recently by Zachtronics.
 
-WARNING: This assembler handles UNDOCUMENTED INSTRUCTIONS available in the game, and as such its source contains *mild spoilers!*
+WARNING: This assembler handles UNDOCUMENTED INSTRUCTIONS available in the game, and as such its
+source contains *mild spoilers!*
 
 # Usage
 
@@ -11,7 +13,15 @@ WARNING: This assembler handles UNDOCUMENTED INSTRUCTIONS available in the game,
 
 # Assembly Syntax
 
-The assembly used is almost entirely identical to that in SHENZHEN.IO, the syntax is the same but some compile-time 'macro' instructions have been added as described below:
+The assembly used is almost entirely identical to that in SHENZHEN.IO, the only differences are:
+
+## Preprocessor Directives
+
+There is currently only one supported directive:
+
+- `!include "some/filepath/here.asm"` - textually includes the specified file in-place
+
+## 'Macro' Instructions
 
 | Mneumonic | Argument 1 | Argument 2 | Explanation
 | --------- |:----------:|:----------:| -----------
