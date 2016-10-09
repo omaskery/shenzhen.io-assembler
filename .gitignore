@@ -1,4 +1,5 @@
 *~
+*.swp
 .idea
 __pycache__
 *.asm
