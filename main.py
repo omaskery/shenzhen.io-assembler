@@ -511,6 +511,26 @@ def symbol_pass(instructions: [Instruction], chip: ChipInfo):
                 )
             )
 
+        # ensure that constants are valid
+        if inst.mneumonic == FAKE_OP_CONST:
+            # we currently only support integer literal constants
+
+            # ensure it parses as an integer
+            try:
+                as_integer = int(value)
+            except:
+                raise AssemblerException(
+                    inst.source_pos,
+                    "constants currently only support integer literals"
+                )
+
+            # ensure it's within the range of integers that SHENZHEN I/O requires
+            if not (-999 <= as_integer <= 999):
+                raise AssemblerException(
+                    inst.source_pos,
+                    "integer constants must be between -999 and 999 inclusive"
+                )
+
         # record the new alias/const
         verbose("symbol {} is {} of {}".format(
             name, inst.mneumonic, value
