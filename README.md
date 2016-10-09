@@ -11,7 +11,7 @@ WARNING: This assembler handles UNDOCUMENTED INSTRUCTIONS available in the game,
 
 # Assembly Syntax
 
-The syntax used is almost entirely identical to that in SHENZHEN.IO, any additional instructions are purely compile-time macros and are explained below:
+The assembly used is almost entirely identical to that in SHENZHEN.IO, the syntax is the same but some compile-time 'macro' instructions have been added as described below:
 
 | Mneumonic | Argument 1 | Argument 2 | Explanation
 | --------- |:----------:|:----------:| -----------
@@ -22,8 +22,8 @@ The syntax used is almost entirely identical to that in SHENZHEN.IO, any additio
 
 - [ ] Verify types of instruction arguments
 - [ ] Verify register references exist on selected chip
-- [ ] Warn about exceeding memory space limitations of selected chip
-- [ ] Optimisation?
-- [ ] Detect unused code?
+- [x] Warn about exceeding memory space limitations of selected chip
+- [ ] Basic optimisation (probably not?)
+- [ ] Detect unused code (possibly not?)
 - [ ] Detect unused aliases/constants?
 

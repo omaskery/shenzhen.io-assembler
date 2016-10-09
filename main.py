@@ -221,12 +221,16 @@ for chip_name in CHIPS.keys():
 def main():
     args = get_args()
 
+    if args.verbose:
+        global verbose
+        verbose = verbose_on
+
     try:
         chip = CHIPS.get(args.chip, None)
-        print("selected chip {}:".format(args.chip))
-        print("  registers:")
+        verbose("selected chip {}:".format(args.chip))
+        verbose("  registers:")
         for reg in chip.registers:
-            print("    {} ({})".format(
+            verbose("    {} ({})".format(
                 reg, chip.registers[reg].type
             ))
         lines = read_lines(args.input)
@@ -252,6 +256,17 @@ def write_out(instructions, path):
                 " ".join(tokens)
             )
             output.write(line)
+
+
+def verbose_on(*args, **kwargs):
+    print(*args, **kwargs)
+
+
+def verbose_off(*args, **kwargs):
+    pass
+
+
+verbose = verbose_off
 
 
 def assemble(lines, chip):
@@ -313,6 +328,12 @@ def assemble(lines, chip):
                     output.append(label)
             lonely_labels = []
         output.append(assembled)
+
+    if len(output) > chip.memory:
+        print("warning: program size exceeds chip memory ({} > {})".format(
+            len(output), chip.memory
+        ))
+
     return output
 
 
@@ -320,6 +341,8 @@ def assemble_instruction(symbols, chip, inst, inst_info):
     args = []
 
     for given_arg, expected_Type in zip(inst.args, inst_info.argtypes):
+        # TODO: check argument types
+        # TODO: check references to registers are valid on current chip
         if given_arg in symbols:
             args.append(symbols[given_arg].value)
         else:
@@ -365,7 +388,7 @@ def symbol_pass(instructions, chip):
                     )
                 )
 
-            print("symbol {} is {} of {}".format(
+            verbose("symbol {} is {} of {}".format(
                 name, inst.mneumonic, value
             ))
             result[name] = Symbol(inst.lineno, name, value)
@@ -434,13 +457,20 @@ def get_args():
         description="simple assembler/compiler for making it easier to write SHENZHEN.IO programs"
     )
     parser.add_argument(
-        'input', type=argparse.FileType(), help="the input file to ingest"
+        'input', type=argparse.FileType(),
+        help="the input file to ingest"
     )
     parser.add_argument(
-        '-o', '--output', help='the output file path', default='out.asm'
+        '-o', '--output',
+        help='the output file path', default='out.asm'
     )
     parser.add_argument(
-        '-c', '--chip', choices=CHIPS.keys(), default=CHIP_TYPE_MC6000
+        '-c', '--chip', choices=CHIPS.keys(), default=CHIP_TYPE_MC6000,
+        help='inform assembler of target chip for better diagnostics'
+    )
+    parser.add_argument(
+        '-v', '--verbose', action='store_true',
+        help='flag to cause more verbose output during execution'
     )
     return parser.parse_args()
 
