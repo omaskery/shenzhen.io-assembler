@@ -8,7 +8,12 @@ ChipInfo = namedtuple('ChipInfo', 'registers memory')
 RegisterInfo = namedtuple('RegisterInfo', 'name type')
 Symbol = namedtuple('Symbol', 'lineno name value')
 InstructionInfo = namedtuple('InstructionInfo', 'mneumonic argtypes')
-Instruction = namedtuple('Instruction', 'lineno label condition mneumonic args')
+
+
+class Instruction(namedtuple('Instruction', 'lineno label condition mneumonic args')):
+
+    def replace(self, **kwargs):
+        return self._replace(**kwargs)
 
 
 REG_TYPE_NORMAL = 'normal'
@@ -214,12 +219,11 @@ def make_chip_tables_use_keys():
 
     for chip_name in CHIPS.keys():
         chip = CHIPS[chip_name]
-        CHIPS[chip_name] = ChipInfo(
+        CHIPS[chip_name] = chip._replace(
             registers=OrderedDict([
                 (info.name, info)
                 for info in chip.registers
             ]),
-            memory=chip.memory
         )
 make_chip_tables_use_keys()
 
@@ -378,13 +382,8 @@ def assemble(lines: [str], chip: ChipInfo) -> [Instruction]:
                 uncompressable_labels = lonely_labels[:-1]
                 # compress only the most recent label
                 to_compress = lonely_labels[-1]
-                # TODO: this would be tidier if I made class derived from namedtuple...
-                assembled = Instruction(
-                    lineno=assembled.lineno,
+                assembled = assembled.replace(
                     label=to_compress.label,
-                    condition=assembled.condition,
-                    mneumonic=assembled.mneumonic,
-                    args=assembled.args
                 )
             # output labels for those we can't compress and empty our lonely label list
             for label in uncompressable_labels:
@@ -423,13 +422,10 @@ def assemble_instruction(symbols: typing.Dict[str, Symbol], chip: ChipInfo, inst
             args.append(given_arg)
 
     # return a transformed instruction, where the only thing that can really change is the arguments
-    return Instruction(
-        lineno=inst.lineno,
-        label=inst.label,
-        condition=inst.condition,
-        mneumonic=inst.mneumonic,
+    result = inst.replace(
         args=args,
     )
+    return result
 
 
 def symbol_pass(instructions: [Instruction], chip: ChipInfo):
