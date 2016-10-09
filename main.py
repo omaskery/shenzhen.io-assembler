@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from collections import namedtuple
 import argparse
+import typing
 
 
 ChipInfo = namedtuple('ChipInfo', 'registers memory')
@@ -207,15 +208,20 @@ CHIPS = {
 }
 
 
-for chip_name in CHIPS.keys():
-    chip = CHIPS[chip_name]
-    CHIPS[chip_name] = ChipInfo(
-        registers=OrderedDict([
-            (info.name, info)
-            for info in chip.registers
-        ]),
-        memory=chip.memory
-    )
+# this is done just to make sure this logic doesn't pollute global variable namespace blah blah
+def make_chip_tables_use_keys():
+    global CHIPS
+
+    for chip_name in CHIPS.keys():
+        chip = CHIPS[chip_name]
+        CHIPS[chip_name] = ChipInfo(
+            registers=OrderedDict([
+                (info.name, info)
+                for info in chip.registers
+            ]),
+            memory=chip.memory
+        )
+make_chip_tables_use_keys()
 
 
 def main():
@@ -241,49 +247,89 @@ def main():
 
 
 def write_out(instructions, path):
-        output = open(path, 'w')
-        for inst in instructions:
-            tokens = [
-                piece
-                for piece in [inst.label, inst.condition, inst.mneumonic] + (inst.args if inst.args is not None else [])
-                if piece is not None
-            ]
-            spacing = ""
-            if inst.label is None and inst.condition is None:
-                spacing = "  "
-            line = "{}{}\n".format(
-                spacing,
-                " ".join(tokens)
-            )
-            output.write(line)
+    """
+    takes a collection of instructions and writes them out to a file
+    as specified by the path argument
+    """
+    output = open(path, 'w')
+    for inst in instructions:
+        tokens = [
+            piece
+            for piece in [inst.label, inst.condition, inst.mneumonic] + (inst.args if inst.args is not None else [])
+            if piece is not None
+        ]
+        spacing = ""
+        if inst.label is None and inst.condition is None:
+            spacing = "  "
+        line = "{}{}\n".format(
+            spacing,
+            " ".join(tokens)
+        )
+        output.write(line)
 
 
 def verbose_on(*args, **kwargs):
+    """
+    dumb wrapper for print, see verbose_off and verbose
+    """
     print(*args, **kwargs)
 
 
 def verbose_off(*args, **kwargs):
-    pass
+    """
+    dummy function provides alternative to verbose_off
+    """
+    _ = args, kwargs
 
 
+# dumb way of doing optional verbose output, see verbose_on and verbose_off
 verbose = verbose_off
 
 
-def assemble(lines, chip):
+def assemble(lines: [str], chip: ChipInfo) -> [Instruction]:
+    """
+    takes lines of text from a source file, parses them as instructions and
+    produces a list of output instructions in the format SHENZHEN I/O expects
+    :param lines: a list of lines for parsing as instructions
+    :param chip: information about the target microchip, for providing relevant warnings
+    :return: a list of instructions ready for serialising and presenting to SHENZHEN I/O
+    """
+
+    # parse inputs
     instructions = parse_lines(lines)
+
+    # extract aliases/constants out into a dictionary
     symbol_table = symbol_pass(instructions, chip)
+
+    # this will track the resulting instruction list
     output = []
 
+    # this will track labels that appear on their own in a line, we'll
+    # delay emitting these until we see the next instruction, then we
+    # will try and put this label on the same line as the next instruction
+    # this is to address situations like:
+    #
+    #     some_label:
+    #       some code here
+    #
+    # where this could be on one line (SHENZHEN I/O requires you to minimise lines of code!)
+    # so we try to output:
+    #
+    #     some_label: some code here
     lonely_labels = []
 
+    # assemble each instruction
     for inst in instructions:
+        # detect labels with no instruction, emit these as late as possible (see lonely_labels above)
         if inst.label is not None and inst.mneumonic is None:
             lonely_labels.append(inst)
             continue
 
+        # currently all virtual instructions are handled in the symbol_pass, so ignore them
         if inst.mneumonic in VIRTUAL_INSTRUCTIONS.keys():
             continue
 
+        # fetch instruction details and abort if unable to find some
         info = INSTRUCTIONS.get(inst.mneumonic, None)
         if info is None:
             raise AssemblerException(
@@ -293,7 +339,9 @@ def assemble(lines, chip):
                 )
             )
 
+        # validate the arguments
         for given_arg, expected_type in zip(inst.args, info.argtypes):
+            # ensure the right number of arguments are provided
             if given_arg is None:
                 raise AssemblerException(
                     inst.lineno,
@@ -308,27 +356,45 @@ def assemble(lines, chip):
                         inst.mneumonic
                     )
                 )
+            # TODO: check argument types
 
+        # perform any transformations on this instruction required
         assembled = assemble_instruction(symbol_table, chip, inst, info)
+
+        # before we add the assembled instruction, deal with any lonely labels we've acquired!
         if len(lonely_labels) > 0:
+            # if we have seen lots of labels we just have to emit them on separate lines,
+            # these will be put in umcompressable_labels - this shouldn't happen often because
+            # multiple labels to the same place are almost entirely pointless
+            uncompressable_labels = []
+
+            # if the instruction we're assembling already has a label we can't do anything,
+            # so all lonely_labels are uncompressable
             if assembled.label is not None:
-                for label in lonely_labels:
-                    output.append(label)
+                uncompressable_labels = lonely_labels
+            # the instruction has no label, so lets rebuild it with a new label!
             else:
-                extra = lonely_labels[:-1]
-                compressed = lonely_labels[-1]
+                # only one label can win, though, the rest are uncompressable
+                uncompressable_labels = lonely_labels[:-1]
+                # compress only the most recent label
+                to_compress = lonely_labels[-1]
+                # TODO: this would be tidier if I made class derived from namedtuple...
                 assembled = Instruction(
                     lineno=assembled.lineno,
-                    label=compressed.label,
+                    label=to_compress.label,
                     condition=assembled.condition,
                     mneumonic=assembled.mneumonic,
                     args=assembled.args
                 )
-                for label in extra:
-                    output.append(label)
+            # output labels for those we can't compress and empty our lonely label list
+            for label in uncompressable_labels:
+                output.append(label)
             lonely_labels = []
+
+        # finally record the assembled/translated instruction
         output.append(assembled)
 
+    # now we know how many lines of assembly we're generating, will it fit on the chip?
     if len(output) > chip.memory:
         print("warning: program size exceeds chip memory ({} > {})".format(
             len(output), chip.memory
@@ -337,17 +403,26 @@ def assemble(lines, chip):
     return output
 
 
-def assemble_instruction(symbols, chip, inst, inst_info):
+def assemble_instruction(symbols: typing.Dict[str, Symbol], chip: ChipInfo, inst: [Instruction], inst_info: InstructionInfo):
+    """
+    assemble a single instruction
+    :param symbols: the symbol table from the symbol_pass
+    :param chip: information about the chip we're targetting
+    :param inst: the instruction to assemble
+    :param inst_info: information about the instruction mneumonic we are assembling
+    :return: the instruction after any transformations have been applied
+    """
     args = []
 
+    # replace all symbols with their value
     for given_arg, expected_Type in zip(inst.args, inst_info.argtypes):
-        # TODO: check argument types
         # TODO: check references to registers are valid on current chip
         if given_arg in symbols:
             args.append(symbols[given_arg].value)
         else:
             args.append(given_arg)
 
+    # return a transformed instruction, where the only thing that can really change is the arguments
     return Instruction(
         lineno=inst.lineno,
         label=inst.label,
@@ -357,45 +432,67 @@ def assemble_instruction(symbols, chip, inst, inst_info):
     )
 
 
-def symbol_pass(instructions, chip):
+def symbol_pass(instructions: [Instruction], chip: ChipInfo):
+    """
+    scan through the instructions looking for aliases and constant definitions, producing a table of them
+    :param instructions: the instructions to scan
+    :param chip: information about the target chip, in order to diagnose bad register aliases
+    :return: a dictionary of symbols
+    """
     result = {}
+
+    # scan each instruction
     for inst in instructions:
-        if inst.mneumonic in (FAKE_OP_ALIAS, FAKE_OP_CONST):
-            if len(inst.args) < 2:
-                raise AssemblerException(
-                    inst.lineno,
-                    "expected two arguments to {}: name and value".format(
-                        inst.mneumonic
-                    )
+        # if it isn't an alias/const then we don't care, skip it
+        if inst.mneumonic not in (FAKE_OP_ALIAS, FAKE_OP_CONST):
+            continue
+
+        # check we have enough arguments
+        if len(inst.args) < 2:
+            raise AssemblerException(
+                inst.lineno,
+                "expected two arguments to {}: name and value".format(
+                    inst.mneumonic
                 )
+            )
 
-            name = inst.args[0]
-            value = inst.args[1]
+        name = inst.args[0]
+        value = inst.args[1]
 
-            if chip.registers.get(name, None):
-                raise AssemblerException(
-                    inst.lineno,
-                    "cannot use {} as an {} name, reserved as a register name on this chip".format(
-                        name, inst.mneumonic
-                    )
+        # TODO: ensure that the name isn't already defined!
+
+        # ensure that the name of the alias/const isn't going to collide with any register names!
+        if chip.registers.get(name, None):
+            raise AssemblerException(
+                inst.lineno,
+                "cannot use {} as an {} name, reserved as a register name on this chip".format(
+                    name, inst.mneumonic
                 )
+            )
 
-            if inst.mneumonic == FAKE_OP_ALIAS and chip.registers.get(value, None) is None:
-                raise AssemblerException(
-                    inst.lineno,
-                    "{} is an invalid alias as '{}' is not a valid register name on this chip".format(
-                        name, value
-                    )
+        # ensure that any aliases actually refer to real registers!
+        if inst.mneumonic == FAKE_OP_ALIAS and chip.registers.get(value, None) is None:
+            raise AssemblerException(
+                inst.lineno,
+                "{} is an invalid alias as '{}' is not a valid register name on this chip".format(
+                    name, value
                 )
+            )
 
-            verbose("symbol {} is {} of {}".format(
-                name, inst.mneumonic, value
-            ))
-            result[name] = Symbol(inst.lineno, name, value)
+        # record the new alias/const
+        verbose("symbol {} is {} of {}".format(
+            name, inst.mneumonic, value
+        ))
+        result[name] = Symbol(inst.lineno, name, value)
     return result
 
 
-def parse_lines(lines):
+def parse_lines(lines: [str]) -> [Instruction]:
+    """
+    takes a collection of lines and parses them into instructions
+    :param lines: the lines to parse
+    :return: the resulting instruction list
+    """
     return list(
         filter(
             lambda x: x is not None,
@@ -407,20 +504,26 @@ def parse_lines(lines):
     )
 
 
-def parse_line(line):
-    number, line = line
+def parse_line(line: str) -> Instruction:
+    """
+    parses a single line into an assembly instruction
+    :param line: the line to parse
+    :return: an instruction object parsed from the given line
+    """
+    number, text = line
+
     # remove comments
-    comment_start = line.find("#")
+    comment_start = text.find("#")
     if comment_start != -1:
-        line = line[:comment_start]
-    line = line.strip()
+        text = text[:comment_start]
+    text = text.strip()
 
     # empty lines don't need parsing
-    if not line:
+    if not text:
         return None
 
     # parse by spaces
-    tokens = line.split(" ")
+    tokens = text.split(" ")
     label, condition, mneumonic, args = None, None, None, None
     # label?
     if tokens[0].endswith(":"):
@@ -445,14 +548,23 @@ def parse_line(line):
     return Instruction(number, label, condition, mneumonic, args)
 
 
-def read_lines(file):
+def read_lines(file) -> [(int, str)]:
+    """
+    reads all the lines from a file and matches them up with their source position
+    :param file: the file handle to read lines from
+    :return: a collection of tuples describing lines of text and their source position
+    """
     return [
         (number, line.strip())
         for number, line in enumerate(file.readlines(), start=1)
     ]
 
 
-def get_args():
+def get_args() -> argparse.Namespace:
+    """
+    utility method that handles the argument parsing via argparse
+    :return: the result of using argparse to parse the command line arguments
+    """
     parser = argparse.ArgumentParser(
         description="simple assembler/compiler for making it easier to write SHENZHEN.IO programs"
     )
@@ -476,7 +588,14 @@ def get_args():
 
 
 class AssemblerException(Exception):
+    """custom exception class so that we only catch our own, not internal fatal ones"""
+
     def __init__(self, lineno, message):
+        """
+        constructor
+        :param lineno: the source position of the error
+        :param message: a description of the failure
+        """
         super().__init__("[line {}]: {}".format(lineno, message))
 
 
