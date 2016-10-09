@@ -638,7 +638,12 @@ def read_lines(file, path: str, included_files: [str]) -> [LineOfSource]:
                     "include directive expects filepath surrounded in quotation marks"
                 )
             # remove quotation marks
-            included_path = os.path.abspath(included_path[1:-1])
+            included_path = included_path[1:-1]
+
+            # make path absolute
+            if not os.path.isabs(included_path):
+                current_folder = os.path.dirname(path)
+                included_path = os.path.join(current_folder, included_path)
 
             # ensure it's a real file
             if not os.path.isfile(included_path):
