@@ -3,6 +3,7 @@ from collections import namedtuple
 from itertools import zip_longest
 import argparse
 import typing
+import os
 
 
 ChipInfo = namedtuple('ChipInfo', 'registers memory')
@@ -15,9 +16,9 @@ LineOfSource = namedtuple('LineOfSource', 'pos text')
 class SourcePosition(namedtuple('SourcePosition', 'file line')):
 
     def __str__(self):
-        return "{}:{}".format(
+        return "{}{}".format(
             self.file,
-            self.line
+            ":{}".format(self.line) if self.line else ""
         )
 
 
@@ -246,6 +247,8 @@ def main():
         global verbose
         verbose = verbose_on
 
+    root_path = os.path.abspath(args.input.name)
+
     try:
         chip = CHIPS.get(args.chip, None)
         verbose("selected chip {}:".format(args.chip))
@@ -254,11 +257,18 @@ def main():
             verbose("    {} ({})".format(
                 reg, chip.registers[reg].type
             ))
-        lines = read_lines(args.input, args.input.name)
+        # this dictionary will track what files we include to prevent include cycles
+        # the key is the absolute path to an included file
+        # the value tracks where it was included
+        # for the top level file this makes no sense, so we hard code a default
+        included_files = {
+            os.path.abspath(root_path): SourcePosition("<root file passed to assembler>", None)
+        }
+        lines = read_lines(args.input, root_path, included_files)
         assembled = assemble(lines, chip)
         write_out(assembled, args.output)
     except AssemblerException as ex:
-        print("error:", ex)
+        print("error ", ex)
 
 
 def write_out(instructions, path):
@@ -540,7 +550,7 @@ def parse_line(line: LineOfSource) -> Instruction:
     text = line.text
 
     # remove comments
-    comment_start = text.find("#")
+    comment_start = text.find(";")
     if comment_start != -1:
         text = text[:comment_start]
     text = text.strip()
@@ -575,20 +585,88 @@ def parse_line(line: LineOfSource) -> Instruction:
     return Instruction(line.pos, label, condition, mneumonic, args)
 
 
-def read_lines(file, path: str) -> [LineOfSource]:
+def read_lines(file, path: str, included_files: [str]) -> [LineOfSource]:
     """
     reads all the lines from a file and matches them up with their source position
     :param file: the file handle to read lines from
     :param path: the path to the file being read
-    :return: a collection of tuples describing lines of text and their source position
+    :return: a collection of objects describing lines of text and their source position
     """
 
-    # TODO: implement preprocessor here and perform textual import?
+    result = []
+    # read in each line, tagging it with source position information, handling
+    # preprocessor directives as we go
+    for number, line in enumerate(file.readlines(), start=1):
+        pos = SourcePosition(path, number)
+        line = line.strip()
 
-    return [
-        LineOfSource(SourcePosition(path, number), line.strip())
-        for number, line in enumerate(file.readlines(), start=1)
-    ]
+        # handle preprocessor logic here (refactor elsewhere? :/)
+        if line.startswith("#include"):
+            # split the include into its directive and the included path
+            tokens = line.split(maxsplit=1)
+            if len(tokens) < 1:
+                raise AssemblerException(
+                    pos,
+                    "include directive expects a parameter: a file path enclosed in quotes"
+                )
+            included_path = tokens[1]
+            # ensure it is surrounded in quotation marks, it's a bit silly to enforce this
+            # in a way... but if you did smarter parsing this could be beneficial
+            if not (included_path.startswith('"') and included_path.endswith('"')):
+                raise AssemblerException(
+                    pos,
+                    "include directive expects filepath surrounded in quotation marks"
+                )
+            # remove quotation marks
+            included_path = os.path.abspath(included_path[1:-1])
+
+            # ensure it's a real file
+            if not os.path.isfile(included_path):
+                raise AssemblerException(
+                    pos,
+                    "include directive specifies invalid file '{}'".format(
+                        included_path
+                    )
+                )
+
+            # try to open the file, if we can't open it then report an error
+            try:
+                handle = open(included_path)
+            except IOError as io_error:
+                raise AssemblerException(
+                    pos,
+                    "error opening included file '{}': {}".format(
+                        included_path,
+                        io_error
+                    )
+                )
+
+            # check for include cycles
+            if included_path in included_files:
+                raise AssemblerException(
+                    pos,
+                    "include file {} is already included here: {}".format(
+                        included_path,
+                        included_files[included_path]
+                    )
+                )
+            included_files[included_path] = pos
+
+            # add all the included lines into our result using recursion
+            result.extend(
+                read_lines(handle, included_path, included_files)
+            )
+        # this line looks like a preprocessor directive, but we can't handle it
+        elif line.startswith("#"):
+            print("warning [{}]: unknown preprocessor directive '{}'".format(
+                pos, line.split(maxsplit=1)[0][1:]
+            ))
+        # this looks like a normal line of source, record it in our results
+        else:
+            result.append(
+                LineOfSource(SourcePosition(path, number), line.strip())
+            )
+    return result
 
 
 def get_args() -> argparse.Namespace:
