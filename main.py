@@ -464,7 +464,13 @@ def symbol_pass(instructions: [Instruction], chip: ChipInfo):
         name = inst.args[0]
         value = inst.args[1]
 
-        # TODO: ensure that the name isn't already defined!
+        if name in result:
+            raise AssemblerException(
+                inst.lineno,
+                "redefinition of symbol '{}', previously declared here: {}".format(
+                    name, result[name].lineno
+                )
+            )
 
         # ensure that the name of the alias/const isn't going to collide with any register names!
         if chip.registers.get(name, None):
@@ -488,7 +494,11 @@ def symbol_pass(instructions: [Instruction], chip: ChipInfo):
         verbose("symbol {} is {} of {}".format(
             name, inst.mneumonic, value
         ))
-        result[name] = Symbol(inst.lineno, name, value)
+        result[name] = Symbol(
+            lineno=inst.lineno,
+            name=name,
+            value=value
+        )
     return result
 
 
