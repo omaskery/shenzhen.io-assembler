@@ -5,7 +5,7 @@ import typing
 
 from .instructions import INSTRUCTIONS, VIRTUAL_INSTRUCTIONS, InstructionInfo, FAKE_OP_CONST, FAKE_OP_ALIAS
 from .parse import Instruction, Parser
-from .source import LineOfSource
+from .source import LineOfSource, SourcePosition
 from .errors import IssueLog
 from .chips import ChipInfo
 from . import log
@@ -99,6 +99,7 @@ def assemble(issues: IssueLog, lines: [LineOfSource], chip: ChipInfo) -> [Instru
     # now we know how many lines of assembly we're generating, will it fit on the chip?
     if len(output) > chip.memory:
         issues.warning(
+            SourcePosition("<whole program>", None),
             "program size exceeds chip memory ({} > {})",
             len(output),
             chip.memory

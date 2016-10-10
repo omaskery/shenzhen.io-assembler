@@ -22,3 +22,20 @@ const non_integer_const non_integer_value
 +
 -
 @
+
+# fill up memory with too many instructions
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
