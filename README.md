@@ -34,6 +34,15 @@ const off_value 0
   # so this will run forever now
 ```
 
+Which compiles to:
+
+```asm
+  mov 100 p1
+  slp 2
+  mov 0 p1
+  slp 4
+```
+
 # Assembly Syntax
 
 The assembly used is almost entirely identical to that in SHENZHEN.IO, the only differences are:
