@@ -1,4 +1,3 @@
-
 # the pin we'll pulse the outputs on
 alias output_pin p1
 

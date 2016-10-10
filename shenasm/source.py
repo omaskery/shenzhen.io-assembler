@@ -1,8 +1,9 @@
 from collections import namedtuple
+import typing
 import os
 
 
-from .errors import AssemblerException
+from .errors import IssueLog
 
 
 LineOfSource = namedtuple('LineOfSource', 'pos text')
@@ -17,11 +18,13 @@ class SourcePosition(namedtuple('SourcePosition', 'file line')):
         )
 
 
-def read_lines(file, path: str, included_files: [str]) -> [LineOfSource]:
+def read_lines(issues: IssueLog, file, path: str, included_files: typing.Dict[str, str]) -> [LineOfSource]:
     """
     reads all the lines from a file and matches them up with their source position
+    :param issues: a collection of issues generated during the assembler's execution
     :param file: the file handle to read lines from
     :param path: the path to the file being read
+    :param included_files: a record of what files have been included already (and from where) to prevent include cycles
     :return: a collection of objects describing lines of text and their source position
     """
 
@@ -36,19 +39,24 @@ def read_lines(file, path: str, included_files: [str]) -> [LineOfSource]:
         if line.startswith("!include"):
             # split the include into its directive and the included path
             tokens = line.split(maxsplit=1)
-            if len(tokens) < 1:
-                raise AssemblerException(
+            if len(tokens) < 2:
+                issues.error(
                     pos,
                     "include directive expects a parameter: a file path enclosed in quotes"
                 )
+                continue
+
             included_path = tokens[1]
+
             # ensure it is surrounded in quotation marks, it's a bit silly to enforce this
             # in a way... but if you did smarter parsing this could be beneficial
             if not (included_path.startswith('"') and included_path.endswith('"')):
-                raise AssemblerException(
+                issues.error(
                     pos,
                     "include directive expects filepath surrounded in quotation marks"
                 )
+                continue
+
             # remove quotation marks
             included_path = included_path[1:-1]
 
@@ -59,45 +67,53 @@ def read_lines(file, path: str, included_files: [str]) -> [LineOfSource]:
 
             # ensure it's a real file
             if not os.path.isfile(included_path):
-                raise AssemblerException(
+                issues.error(
                     pos,
                     "include directive specifies invalid file '{}'".format(
                         included_path
                     )
                 )
+                continue
 
             # try to open the file, if we can't open it then report an error
             try:
                 handle = open(included_path)
             except IOError as io_error:
-                raise AssemblerException(
+                issues.error(
                     pos,
                     "error opening included file '{}': {}".format(
                         included_path,
                         io_error
                     )
                 )
+                continue
 
             # check for include cycles
             if included_path in included_files:
-                raise AssemblerException(
+                issues.error(
                     pos,
                     "include file {} is already included here: {}".format(
                         included_path,
                         included_files[included_path]
                     )
                 )
+                continue
+
             included_files[included_path] = pos
 
             # add all the included lines into our result using recursion
             result.extend(
-                read_lines(handle, included_path, included_files)
+                read_lines(issues, handle, included_path, included_files)
             )
         # this line looks like a preprocessor directive, but we can't handle it
         elif line.startswith("!"):
-            print("warning [{}]: unknown preprocessor directive '{}'".format(
-                pos, line.split(maxsplit=1)[0][1:]
-            ))
+            words = line.split()
+            directive = words[0][1:]
+            issues.warning(
+                pos,
+                "unknown preprocessor directive '{}'",
+                directive
+            )
         # this looks like a normal line of source, record it in our results
         else:
             result.append(

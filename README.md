@@ -73,6 +73,6 @@ There is currently only one supported directive:
 - [x] Error on redefinitions of alias/const names
 - [x] Add support for including other files textually (preprocessor style)
 - [x] Improve error reporting to use source file and source line
-- [ ] Make errors accumulate and prevent output, rather than immediate abort?
+- [x] Make errors accumulate and prevent output, rather than immediate abort?
 - [ ] Make constants evaluate simple expressions?
 

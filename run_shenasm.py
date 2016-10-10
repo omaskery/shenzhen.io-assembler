@@ -1,4 +1,5 @@
 import argparse
+import sys
 import os
 
 
@@ -7,32 +8,49 @@ import shenasm
 
 def main():
     args = get_args()
+    result = 0
 
     if args.verbose:
         shenasm.log.verbose = shenasm.log.verbose_on
 
     root_path = os.path.abspath(args.input.name)
 
-    try:
-        chip = shenasm.chips.lookup_by_name(args.chip)
-        shenasm.log.verbose("selected chip {}:".format(args.chip))
-        shenasm.log.verbose("  registers:")
-        for reg in chip.registers:
-            shenasm.log.verbose("    {} ({})".format(
-                reg, chip.registers[reg].type
-            ))
-        # this dictionary will track what files we include to prevent include cycles
-        # the key is the absolute path to an included file
-        # the value tracks where it was included
-        # for the top level file this makes no sense, so we hard code a default
-        included_files = {
-            os.path.abspath(root_path): shenasm.source.SourcePosition("<root file passed to assembler>", None)
-        }
-        lines = shenasm.source.read_lines(args.input, root_path, included_files)
-        assembled = shenasm.assemble.assemble(lines, chip)
+    issues = shenasm.errors.IssueLog()
+
+    chip = shenasm.chips.lookup_by_name(args.chip)
+    shenasm.log.verbose("selected chip {}:".format(args.chip))
+    shenasm.log.verbose("  registers:")
+    for reg in chip.registers:
+        shenasm.log.verbose("    {} ({})".format(
+            reg, chip.registers[reg].type
+        ))
+
+    # this dictionary will track what files we include to prevent include cycles
+    # the key is the absolute path to an included file
+    # the value tracks where it was included
+    # for the top level file this makes no sense, so we hard code a default
+    included_files = {
+        os.path.abspath(root_path): shenasm.source.SourcePosition("<root file passed to assembler>", None)
+    }
+    lines = shenasm.source.read_lines(issues, args.input, root_path, included_files)
+
+    assembled = shenasm.assemble.assemble(issues, lines, chip)
+
+    if len(issues.issues) > 0:
+        print("{} warnings and {} errors".format(
+            len(issues.warnings),
+            len(issues.errors)
+        ))
+        for issue in issues.issues:
+            print(issue)
+
+    if len(issues.errors) < 1:
         shenasm.serialise.write_out(assembled, args.output)
-    except shenasm.errors.AssemblerException as ex:
-        print("error ", ex)
+    else:
+        print("output inhibited due to errors")
+        result = -1
+
+    sys.exit(result)
 
 
 def get_args() -> argparse.Namespace:
