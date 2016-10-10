@@ -9,7 +9,23 @@ source contains *mild spoilers!*
 
 # Usage
 
-`usage: main.py [-h] [-o OUTPUT] [-c {MC4000X,MC4000,MC6000}] input`
+```bash
+> .\run_shenasm.py -h
+usage: run_shenasm.py [-h] [-o OUTPUT] [-c {MC6000,MC4000,MC4000X}] [-v] input
+
+simple assembler/compiler for making it easier to write SHENZHEN.IO programs
+
+positional arguments:
+  input                 the input file to ingest
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -o OUTPUT, --output OUTPUT
+                        the output file path
+  -c {MC6000,MC4000,MC4000X}, --chip {MC6000,MC4000,MC4000X}
+                        inform assembler of target chip for better diagnostics
+  -v, --verbose         flag to cause more verbose output during execution
+```
 
 ## Example: Pulse Generator
 
