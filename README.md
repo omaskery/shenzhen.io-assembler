@@ -4,8 +4,7 @@
 This is just a silly tool to make it easier to write assembly for the microprocessors in SHENZHEN I/O,
 an awesome programming game released recently by Zachtronics.
 
-WARNING: This assembler handles UNDOCUMENTED INSTRUCTIONS available in the game, and as such its
-source contains *mild spoilers!*
+WARNING: The source contains *mild spoilers!* :) You have been warned!
 
 # Usage
 
