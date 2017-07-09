@@ -6,13 +6,13 @@ def write_out(instructions, path):
     as specified by the path argument
     """
 
-    # TODO: compress label names to be single lettes etc?
+    # TODO: compress label names to be single letters etc?
 
     output = open(path, 'w')
     for inst in instructions:
         tokens = [
             piece
-            for piece in [inst.label, inst.condition, inst.mneumonic] + (inst.args if inst.args is not None else [])
+            for piece in [inst.label, inst.condition, inst.mnemonic] + (inst.args if inst.args is not None else [])
             if piece is not None
             ]
         spacing = ""

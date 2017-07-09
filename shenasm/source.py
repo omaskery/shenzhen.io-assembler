@@ -1,4 +1,3 @@
-from collections import namedtuple
 import typing
 import os
 
@@ -6,10 +5,34 @@ import os
 from .errors import IssueLog
 
 
-LineOfSource = namedtuple('LineOfSource', 'pos text')
+class LineOfSource(object):
+
+    def __init__(self, pos, text):
+        self._pos = pos
+        self._text = text
+
+    @property
+    def pos(self):
+        return self._pos
+
+    @property
+    def text(self):
+        return self._text
 
 
-class SourcePosition(namedtuple('SourcePosition', 'file line')):
+class SourcePosition(object):
+
+    def __init__(self, file, line):
+        self._file = file
+        self._line = line
+
+    @property
+    def file(self):
+        return self._file
+
+    @property
+    def line(self):
+        return self._line
 
     def __str__(self):
         return "{}{}".format(

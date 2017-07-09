@@ -1,12 +1,28 @@
-from collections import namedtuple
 
 
 WARNING = 'warning'
 ERROR = 'error'
 
 
-class Issue(namedtuple('Issue', 'level source_pos message')):
+class Issue(object):
     """records information about an issue that was encountered during assembler execution"""
+
+    def __init__(self, level, source_pos, message):
+        self._level = level
+        self._source_pos = source_pos
+        self._message = message
+
+    @property
+    def level(self):
+        return self._level
+
+    @property
+    def source_pos(self):
+        return self._source_pos
+
+    @property
+    def message(self):
+        return self._message
 
     def __str__(self):
         return "{} line {}: {} - {}".format(

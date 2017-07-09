@@ -1,7 +1,18 @@
-from collections import namedtuple
 
 
-InstructionInfo = namedtuple('InstructionInfo', 'mneumonic argtypes')
+class InstructionInfo(object):
+
+    def __init__(self, mnemonic, argtypes):
+        self._mnemonic = mnemonic
+        self._argtypes = argtypes
+
+    @property
+    def mnemonic(self):
+        return self._mnemonic
+
+    @property
+    def argtypes(self):
+        return self._argtypes
 
 
 INST_ARG_TYPE_REG = 0
@@ -35,99 +46,99 @@ FAKE_OP_CONST = 'const'
 
 INSTRUCTIONS = {
     CHIP_OP_NOP: InstructionInfo(
-        mneumonic=CHIP_OP_NOP,
+        mnemonic=CHIP_OP_NOP,
         argtypes=[],
     ),
     CHIP_OP_MOV: InstructionInfo(
-        mneumonic=CHIP_OP_MOV,
+        mnemonic=CHIP_OP_MOV,
         argtypes=[
             [INST_ARG_TYPE_REG, INST_ARG_TYPE_INT],
             [INST_ARG_TYPE_REG],
         ],
     ),
     CHIP_OP_JMP: InstructionInfo(
-        mneumonic=CHIP_OP_JMP,
+        mnemonic=CHIP_OP_JMP,
         argtypes=[
             [INST_ARG_TYPE_LBL],
         ],
     ),
     CHIP_OP_SLP: InstructionInfo(
-        mneumonic=CHIP_OP_SLP,
+        mnemonic=CHIP_OP_SLP,
         argtypes=[
             [INST_ARG_TYPE_REG, INST_ARG_TYPE_INT],
         ],
     ),
     CHIP_OP_SLX: InstructionInfo(
-        mneumonic=CHIP_OP_SLX,
+        mnemonic=CHIP_OP_SLX,
         argtypes=[
             [INST_ARG_TYPE_XBUS_PIN],
         ],
     ),
     CHIP_OP_ADD: InstructionInfo(
-        mneumonic=CHIP_OP_ADD,
+        mnemonic=CHIP_OP_ADD,
         argtypes=[
             [INST_ARG_TYPE_REG, INST_ARG_TYPE_INT],
         ],
     ),
     CHIP_OP_SUB: InstructionInfo(
-        mneumonic=CHIP_OP_SUB,
+        mnemonic=CHIP_OP_SUB,
         argtypes=[
             [INST_ARG_TYPE_REG, INST_ARG_TYPE_INT],
         ],
     ),
     CHIP_OP_MUL: InstructionInfo(
-        mneumonic=CHIP_OP_MUL,
+        mnemonic=CHIP_OP_MUL,
         argtypes=[
             [INST_ARG_TYPE_REG, INST_ARG_TYPE_INT],
         ],
     ),
     CHIP_OP_NOT: InstructionInfo(
-        mneumonic=CHIP_OP_NOT,
+        mnemonic=CHIP_OP_NOT,
         argtypes=[],
     ),
     CHIP_OP_DGT: InstructionInfo(
-        mneumonic=CHIP_OP_DGT,
+        mnemonic=CHIP_OP_DGT,
         argtypes=[
             [INST_ARG_TYPE_REG, INST_ARG_TYPE_INT],
         ],
     ),
     CHIP_OP_DST: InstructionInfo(
-        mneumonic=CHIP_OP_DST,
+        mnemonic=CHIP_OP_DST,
         argtypes=[
             [INST_ARG_TYPE_REG, INST_ARG_TYPE_INT],
             [INST_ARG_TYPE_REG, INST_ARG_TYPE_INT],
         ],
     ),
     CHIP_OP_TEQ: InstructionInfo(
-        mneumonic=CHIP_OP_TEQ,
+        mnemonic=CHIP_OP_TEQ,
         argtypes=[
             [INST_ARG_TYPE_REG, INST_ARG_TYPE_INT],
             [INST_ARG_TYPE_REG, INST_ARG_TYPE_INT],
         ],
     ),
     CHIP_OP_TGT: InstructionInfo(
-        mneumonic=CHIP_OP_TGT,
+        mnemonic=CHIP_OP_TGT,
         argtypes=[
             [INST_ARG_TYPE_REG, INST_ARG_TYPE_INT],
             [INST_ARG_TYPE_REG, INST_ARG_TYPE_INT],
         ],
     ),
     CHIP_OP_TLT: InstructionInfo(
-        mneumonic=CHIP_OP_TLT,
+        mnemonic=CHIP_OP_TLT,
         argtypes=[
             [INST_ARG_TYPE_REG, INST_ARG_TYPE_INT],
             [INST_ARG_TYPE_REG, INST_ARG_TYPE_INT],
         ],
     ),
     CHIP_OP_TCP: InstructionInfo(
-        mneumonic=CHIP_OP_TCP,
+        mnemonic=CHIP_OP_TCP,
         argtypes=[
             [INST_ARG_TYPE_REG, INST_ARG_TYPE_INT],
             [INST_ARG_TYPE_REG, INST_ARG_TYPE_INT],
         ],
     ),
     CHIP_OP_GEN: InstructionInfo(
-        mneumonic=CHIP_OP_GEN,
+        mnemonic=CHIP_OP_GEN,
         argtypes=[
             [INST_ARG_TYPE_PIN],
             [INST_ARG_TYPE_REG, INST_ARG_TYPE_INT],
@@ -138,14 +149,14 @@ INSTRUCTIONS = {
 
 VIRTUAL_INSTRUCTIONS = {
     FAKE_OP_ALIAS: InstructionInfo(
-        mneumonic=FAKE_OP_ALIAS,
+        mnemonic=FAKE_OP_ALIAS,
         argtypes=[
             [INST_ARG_TYPE_NAME],
             [INST_ARG_TYPE_REG],
         ]
     ),
     FAKE_OP_CONST: InstructionInfo(
-        mneumonic=FAKE_OP_CONST,
+        mnemonic=FAKE_OP_CONST,
         argtypes=[
             [INST_ARG_TYPE_NAME],
             [INST_ARG_TYPE_INT],

@@ -1,14 +1,40 @@
 from collections import OrderedDict
-from collections import namedtuple
 
 
-class ChipInfo(namedtuple('ChipInfo', 'registers memory')):
+class ChipInfo(object):
+
+    def __init__(self, registers, memory):
+        self._registers = registers
+        self._memory = memory
+
+    @property
+    def registers(self):
+        return self._registers
+
+    @property
+    def memory(self):
+        return self._memory
 
     def replace(self, **kwargs):
-        return self._replace(**kwargs)
+        return ChipInfo(
+            kwargs.get("registers", self.registers),
+            kwargs.get("memory", self.memory)
+        )
 
 
-RegisterInfo = namedtuple('RegisterInfo', 'name type')
+class RegisterInfo(object):
+
+    def __init__(self, name, reg_type):
+        self._name = name
+        self._type = reg_type
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def type(self):
+        return self._type
 
 
 REG_TYPE_NORMAL = 'normal'

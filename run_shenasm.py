@@ -1,5 +1,9 @@
+#!/usr/bin/env python3
+
 import argparse
+import typing
 import sys
+import io
 import os
 
 
@@ -53,7 +57,17 @@ def main():
     sys.exit(result)
 
 
-def get_args() -> argparse.Namespace:
+class ProgramArgs(argparse.Namespace):
+
+    def __init__(self):
+        super().__init__()
+        self.verbose = False
+        self.input = typing.cast(io.FileIO, None)
+        self.chip = ""
+        self.output = typing.cast(io.FileIO, None)
+
+
+def get_args() -> ProgramArgs:
     """
     utility method that handles the argument parsing via argparse
     :return: the result of using argparse to parse the command line arguments

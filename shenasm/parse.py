@@ -1,13 +1,46 @@
-from collections import namedtuple
+import typing
 
 
 from .source import LineOfSource
 
 
-class Instruction(namedtuple('Instruction', 'source_pos label condition mneumonic args')):
+class Instruction(object):
+
+    def __init__(self, source_pos, label, condition, mnemonic, args):
+        self._source_pos = source_pos
+        self._label = label
+        self._condition = condition
+        self._mnemonic = mnemonic
+        self._args = args
+
+    @property
+    def source_pos(self):
+        return self._source_pos
+
+    @property
+    def label(self):
+        return self._label
+
+    @property
+    def condition(self):
+        return self._condition
+
+    @property
+    def mnemonic(self):
+        return self._mnemonic
+
+    @property
+    def args(self):
+        return self._args
 
     def replace(self, **kwargs):
-        return self._replace(**kwargs)
+        return Instruction(
+            kwargs.get("source_pos", self.source_pos),
+            kwargs.get("label", self.label),
+            kwargs.get("condition", self.condition),
+            kwargs.get("mnemonic", self.mnemonic),
+            kwargs.get("args", self.args),
+        )
 
 
 class Parser(object):
@@ -31,7 +64,7 @@ class Parser(object):
             )
         )
 
-    def _parse_line(self, line: LineOfSource) -> Instruction:
+    def _parse_line(self, line: LineOfSource) -> typing.Optional[Instruction]:
         """
         parses a single line into an assembly instruction
         :param line: the line to parse
@@ -52,7 +85,7 @@ class Parser(object):
 
         # parse by spaces, the list comprehension is to remove empty strings when double spacing etc is used
         tokens = [token for token in text.split(" ") if token]
-        label, condition, mneumonic, args = None, None, None, None
+        label, condition, mnemonic, args = None, None, None, None
         # label?
         if tokens[0].endswith(":"):
             label = tokens[0]
@@ -63,13 +96,13 @@ class Parser(object):
                 condition = tokens[0]
                 tokens = tokens[1:]
             if len(tokens) > 0:
-                # rest must be mneumonic and args
-                mneumonic = tokens[0].lower()
+                # rest must be mnemonic and args
+                mnemonic = tokens[0].lower()
                 args = tokens[1:]
-        if condition is not None and mneumonic is None:
+        if condition is not None and mnemonic is None:
             self._issues.error(
                 line.pos,
                 "condition symbol '{}' found with no associated instruction?",
                 condition
             )
-        return Instruction(line.pos, label, condition, mneumonic, args)
+        return Instruction(line.pos, label, condition, mnemonic, args)

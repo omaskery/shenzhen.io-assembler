@@ -1,9 +1,8 @@
-from collections import namedtuple
 from itertools import zip_longest
 import typing
 
 
-from .instructions import INSTRUCTIONS, VIRTUAL_INSTRUCTIONS, InstructionInfo, FAKE_OP_CONST, FAKE_OP_ALIAS
+from .instructions import INSTRUCTIONS, VIRTUAL_INSTRUCTIONS, FAKE_OP_CONST, FAKE_OP_ALIAS
 from .parse import Instruction, Parser
 from .source import LineOfSource, SourcePosition
 from .errors import IssueLog
@@ -11,7 +10,24 @@ from .chips import ChipInfo
 from . import log
 
 
-Symbol = namedtuple('Symbol', 'source_pos name value')
+class Symbol(object):
+
+    def __init__(self, source_pos, name, value):
+        self._source_pos = source_pos
+        self._name = name
+        self._value = value
+
+    @property
+    def source_pos(self):
+        return self._source_pos
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def value(self):
+        return self._value
 
 
 def assemble(issues: IssueLog, lines: [LineOfSource], chip: ChipInfo) -> [Instruction]:
@@ -51,12 +67,12 @@ def assemble(issues: IssueLog, lines: [LineOfSource], chip: ChipInfo) -> [Instru
     # assemble each instruction
     for inst in instructions:
         # detect labels with no instruction, emit these as late as possible (see lonely_labels above)
-        if inst.label is not None and inst.mneumonic is None:
+        if inst.label is not None and inst.mnemonic is None:
             lonely_labels.append(inst)
             continue
 
         # currently all virtual instructions are handled in the symbol_pass, so ignore them
-        if inst.mneumonic in VIRTUAL_INSTRUCTIONS.keys():
+        if inst.mnemonic in VIRTUAL_INSTRUCTIONS.keys():
             continue
 
         # perform any transformations on this instruction required
@@ -67,25 +83,24 @@ def assemble(issues: IssueLog, lines: [LineOfSource], chip: ChipInfo) -> [Instru
         # before we add the assembled instruction, deal with any lonely labels we've acquired!
         if len(lonely_labels) > 0:
             # if we have seen lots of labels we just have to emit them on separate lines,
-            # these will be put in umcompressable_labels - this shouldn't happen often because
+            # these will be put in incompressible_labels - this shouldn't happen often because
             # multiple labels to the same place are almost entirely pointless
-            uncompressable_labels = []
 
             # if the instruction we're assembling already has a label we can't do anything,
-            # so all lonely_labels are uncompressable
+            # so all lonely_labels are incompressible
             if assembled.label is not None:
-                uncompressable_labels = lonely_labels
+                incompressible_labels = lonely_labels
             # the instruction has no label, so lets rebuild it with a new label!
             else:
-                # only one label can win, though, the rest are uncompressable
-                uncompressable_labels = lonely_labels[:-1]
+                # only one label can win, though, the rest are incompressible
+                incompressible_labels = lonely_labels[:-1]
                 # compress only the most recent label
                 to_compress = lonely_labels[-1]
                 assembled = assembled.replace(
                     label=to_compress.label,
                 )
             # output labels for those we can't compress and empty our lonely label list
-            for label in uncompressable_labels:
+            for label in incompressible_labels:
                 output.append(label)
             lonely_labels = []
 
@@ -111,10 +126,9 @@ def assemble(issues: IssueLog, lines: [LineOfSource], chip: ChipInfo) -> [Instru
 def assemble_instruction(issues: IssueLog, symbols: typing.Dict[str, Symbol], inst: [Instruction]):
     """
     assemble a single instruction
+    :param issues: record of problems encountered during assembly
     :param symbols: the symbol table from the symbol_pass
-    :param chip: information about the chip we're targetting
     :param inst: the instruction to assemble
-    :param inst_info: information about the instruction mneumonic we are assembling
     :return: the instruction after any transformations have been applied
     """
     args = []
@@ -122,12 +136,12 @@ def assemble_instruction(issues: IssueLog, symbols: typing.Dict[str, Symbol], in
     # TODO: accumulate labels in here, then merge repeated labels?
 
     # fetch instruction details and abort if unable to find some
-    info = INSTRUCTIONS.get(inst.mneumonic, None)
+    info = INSTRUCTIONS.get(inst.mnemonic, None)
     if info is None:
         issues.error(
             inst.source_pos,
             "unknown instruction mneumonic: {}",
-            inst.mneumonic
+            inst.mnemonic
         )
         return None
 
@@ -138,7 +152,7 @@ def assemble_instruction(issues: IssueLog, symbols: typing.Dict[str, Symbol], in
             issues.error(
                 inst.source_pos,
                 "too few arguments to {} instruction",
-                inst.mneumonic
+                inst.mnemonic
             )
             return None
 
@@ -146,7 +160,7 @@ def assemble_instruction(issues: IssueLog, symbols: typing.Dict[str, Symbol], in
             issues.error(
                 inst.source_pos,
                 "too many arguments to {} instruction",
-                inst.mneumonic
+                inst.mnemonic
             )
             return None
 
@@ -178,7 +192,7 @@ def symbol_pass(issues: IssueLog, instructions: [Instruction], chip: ChipInfo) -
     # scan each instruction
     for inst in instructions:
         # if it isn't an alias/const then we don't care, skip it
-        if inst.mneumonic not in (FAKE_OP_ALIAS, FAKE_OP_CONST):
+        if inst.mnemonic not in (FAKE_OP_ALIAS, FAKE_OP_CONST):
             continue
 
         # check we have enough arguments
@@ -186,7 +200,7 @@ def symbol_pass(issues: IssueLog, instructions: [Instruction], chip: ChipInfo) -
             issues.error(
                 inst.source_pos,
                 "expected two arguments to {}: name and value",
-                inst.mneumonic
+                inst.mnemonic
             )
             continue
 
@@ -208,12 +222,12 @@ def symbol_pass(issues: IssueLog, instructions: [Instruction], chip: ChipInfo) -
                 inst.source_pos,
                 "cannot use {} as an {} name, reserved as a register name on this chip",
                 name,
-                inst.mneumonic
+                inst.mnemonic
             )
             continue
 
         # ensure that any aliases actually refer to real registers!
-        if inst.mneumonic == FAKE_OP_ALIAS and chip.registers.get(value, None) is None:
+        if inst.mnemonic == FAKE_OP_ALIAS and chip.registers.get(value, None) is None:
             issues.error(
                 inst.source_pos,
                 "{} is an invalid alias as '{}' is not a valid register name on this chip",
@@ -223,13 +237,13 @@ def symbol_pass(issues: IssueLog, instructions: [Instruction], chip: ChipInfo) -
             continue
 
         # ensure that constants are valid
-        if inst.mneumonic == FAKE_OP_CONST:
+        if inst.mnemonic == FAKE_OP_CONST:
             # we currently only support integer literal constants
 
             # ensure it parses as an integer
             try:
                 as_integer = int(value)
-            except:
+            except ValueError:
                 issues.error(
                     inst.source_pos,
                     "constants currently only support integer literals"
@@ -246,7 +260,7 @@ def symbol_pass(issues: IssueLog, instructions: [Instruction], chip: ChipInfo) -
 
         # record the new alias/const
         log.verbose("symbol {} is {} of {}".format(
-            name, inst.mneumonic, value
+            name, inst.mnemonic, value
         ))
         result[name] = Symbol(
             source_pos=inst.source_pos,
