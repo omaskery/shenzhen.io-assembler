@@ -83,7 +83,7 @@ There is currently only one supported directive:
 - [ ] Basic optimisation (probably not?)
 - [ ] Detect unused code (possibly not?)
 - [ ] Detect unused aliases/constants?
-- [ ] Compress label names
+- [x] Compress label names
 - [ ] Detect and remove redundant labels?
 - [x] Error on redefinitions of alias/const names
 - [x] Add support for including other files textually (preprocessor style)

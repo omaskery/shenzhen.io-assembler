@@ -11,8 +11,11 @@ from . import log
 
 
 class Symbol(object):
+    """
+    represents a symbol in a symbol table, such as a constant's name or register alias
+    """
 
-    def __init__(self, source_pos, name, value):
+    def __init__(self, source_pos: SourcePosition, name: str, value: typing.Union[str, int]):
         self._source_pos = source_pos
         self._name = name
         self._value = value
