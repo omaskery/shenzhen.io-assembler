@@ -42,6 +42,14 @@ class Instruction(object):
             kwargs.get("args", self.args),
         )
 
+    def __str__(self):
+        return "{}{}{}{}".format(
+            self.label if self.label is not None else ("  " if self.condition is None else ""),
+            self.condition + " " if self.condition is not None else "",
+            self.mnemonic if self.mnemonic is not None else "",
+            " " + " ".join(self.args) if self.args is not None else ""
+        )
+
 
 class Parser(object):
 

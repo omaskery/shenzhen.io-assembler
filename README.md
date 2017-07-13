@@ -81,7 +81,7 @@ There is currently only one supported directive:
 - [ ] Verify register references exist on selected chip
 - [x] Warn about exceeding memory space limitations of selected chip
 - [ ] Basic optimisation (probably not?)
-- [ ] Detect unused code (possibly not?)
+- [x] Detect unused code (possibly not?)
 - [ ] Detect unused aliases/constants?
 - [x] Compress label names
 - [ ] Detect and remove redundant labels?

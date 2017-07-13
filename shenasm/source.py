@@ -41,7 +41,7 @@ class SourcePosition(object):
         )
 
 
-def read_lines(issues: IssueLog, file, path: str, included_files: typing.Dict[str, str]) -> [LineOfSource]:
+def read_lines(issues: IssueLog, file, path: str, included_files: typing.Dict[str, SourcePosition]) -> [LineOfSource]:
     """
     reads all the lines from a file and matches them up with their source position
     :param issues: a collection of issues generated during the assembler's execution

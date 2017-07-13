@@ -7,3 +7,4 @@ from . import log
 from . import parse
 from . import serialise
 from . import source
+from . import intermediate

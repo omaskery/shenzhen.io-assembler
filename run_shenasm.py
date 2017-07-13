@@ -34,11 +34,14 @@ def main():
     # the value tracks where it was included
     # for the top level file this makes no sense, so we hard code a default
     included_files = {
-        os.path.abspath(root_path): shenasm.source.SourcePosition("<root file passed to assembler>", None)
+        str(os.path.abspath(root_path)): shenasm.source.SourcePosition("<root file passed to assembler>", None)
     }
     lines = shenasm.source.read_lines(issues, args.input, root_path, included_files)
 
-    assembled = shenasm.assemble.assemble(issues, lines, chip)
+    assembled, ir_nodes = shenasm.assemble.assemble(issues, lines, chip)
+    if args.dotfile is not None:
+        shenasm.intermediate.output_ir_dotfile(args.dotfile, ir_nodes)
+        print("wrote intermediate representation graph to dotfile: {}".format(args.dotfile))
 
     if len(issues.issues) > 0:
         print("{} warnings and {} errors".format(
@@ -65,6 +68,7 @@ class ProgramArgs(argparse.Namespace):
         self.input = typing.cast(io.FileIO, None)
         self.chip = ""
         self.output = typing.cast(io.FileIO, None)
+        self.dotfile = ""
 
 
 def get_args() -> ProgramArgs:
@@ -90,6 +94,10 @@ def get_args() -> ProgramArgs:
     parser.add_argument(
         '-v', '--verbose', action='store_true',
         help='flag to cause more verbose output during execution'
+    )
+    parser.add_argument(
+        '--dotfile', type=str, default=None,
+        help='write a graphviz compatible .dot file containing the intermediate representation graph of the input'
     )
     return parser.parse_args()
 

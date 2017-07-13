@@ -3,6 +3,7 @@ import typing
 
 
 from .instructions import INSTRUCTIONS, VIRTUAL_INSTRUCTIONS, FAKE_OP_CONST, FAKE_OP_ALIAS
+from .intermediate import build_ir_graph, warn_unused_code, output_ir_dotfile, IntermediateNode
 from .parse import Instruction, Parser
 from .source import LineOfSource, SourcePosition
 from .errors import IssueLog
@@ -33,7 +34,7 @@ class Symbol(object):
         return self._value
 
 
-def assemble(issues: IssueLog, lines: [LineOfSource], chip: ChipInfo) -> [Instruction]:
+def assemble(issues: IssueLog, lines: [LineOfSource], chip: ChipInfo) -> ([Instruction], [IntermediateNode]):
     """
     takes lines of text from a source file, parses them as instructions and
     produces a list of output instructions in the format SHENZHEN I/O expects
@@ -49,6 +50,9 @@ def assemble(issues: IssueLog, lines: [LineOfSource], chip: ChipInfo) -> [Instru
 
     # extract aliases/constants out into a dictionary
     symbol_table = symbol_pass(issues, instructions, chip)
+
+    ir_nodes = build_ir_graph(issues, instructions)
+    warn_unused_code(issues, ir_nodes)
 
     # this will track the resulting instruction list
     output = []
@@ -110,7 +114,6 @@ def assemble(issues: IssueLog, lines: [LineOfSource], chip: ChipInfo) -> [Instru
         # finally record the assembled/translated instruction
         output.append(assembled)
 
-    # TODO: detect unused code?
     # TODO: detect unused aliases/constants?
     # TODO: optimisation pass?
 
@@ -123,7 +126,7 @@ def assemble(issues: IssueLog, lines: [LineOfSource], chip: ChipInfo) -> [Instru
             chip.memory
         )
 
-    return output
+    return output, ir_nodes
 
 
 def assemble_instruction(issues: IssueLog, symbols: typing.Dict[str, Symbol], inst: [Instruction]):

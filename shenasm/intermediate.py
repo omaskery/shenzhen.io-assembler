@@ -1,0 +1,242 @@
+import typing
+import uuid
+
+
+from .instructions import CHIP_OP_TEQ, CHIP_OP_TGT, CHIP_OP_TLT, CHIP_OP_TCP, CHIP_OP_JMP
+from .parse import Instruction
+from .errors import IssueLog
+from . import log
+
+
+UNCONDITIONAL = None
+TRUE_CONDITIONAL = '+'
+FALSE_CONDITIONAL = '-'
+
+
+class IntermediateNode(object):
+
+    def __init__(self, instructions: [Instruction] = None, incoming: ['IntermediateNode'] = None, exits: typing.Dict[str, 'IntermediateNode'] = None, creation_reason: str = None):
+        self.uid = uuid.uuid4()
+        self.creation_reason = creation_reason
+        self.incoming = incoming if incoming is not None else []
+        self.instructions = instructions if instructions is not None else []
+        self.exits = exits if exits is not None else {}
+
+    @staticmethod
+    def create_child_of(incoming: ['IntermediateNode'], exit_key: str, instructions: [Instruction]):
+        result = IntermediateNode(incoming, instructions)
+        incoming.exits[exit_key] = result
+        return result
+
+
+def build_ir_graph(issues: IssueLog, instructions: [Instruction]):
+    # first divide the program into 'regions', each region consists of
+    # a group of instructions that can always execute together:
+    #  - adjacent unconditional instructions (except when a label is involved)
+    #  - adjacent conditional instructions with the same condition flag where the previous instruction is not a test
+    #  - jump instructions always terminate a block
+    regions = []
+    label_to_region = {}
+    for instruction in instructions:
+        if len(regions) < 1:
+            regions.append(IntermediateNode([instruction], creation_reason="first"))
+        else:
+            if is_jump_instruction(regions[-1].instructions[-1]):
+                regions.append(IntermediateNode([instruction], creation_reason="last instruction was a jump"))
+            elif instruction.condition is None and (instruction.label is not None or regions[-1].instructions[-1].condition is not None):
+                if instruction.label is not None:
+                    regions.append(IntermediateNode([instruction], creation_reason="starts with label"))
+                elif regions[-1].instructions[-1].condition is not None:
+                    regions.append(IntermediateNode([instruction], creation_reason="unconditional after conditional"))
+            elif instruction.condition is not None:
+                if is_test_instruction(regions[-1].instructions[-1]):
+                    regions.append(IntermediateNode([instruction], creation_reason="last instruction was a test"))
+                elif instruction.condition != regions[-1].instructions[-1].condition:
+                    regions.append(IntermediateNode([instruction], creation_reason="different conditional to last conditional"))
+                else:
+                    regions[-1].instructions.append(instruction)
+            else:
+                regions[-1].instructions.append(instruction)
+
+    # go through and record what labels point to what nodes in our intermediate graph
+    #   we should have orchestrated it so that all labels are the first instruction of a node
+    for region in regions:
+        first_instruction = region.instructions[0]
+        if first_instruction.label is not None:
+            label_without_trailing_colon = first_instruction.label[:-1]
+            label_to_region[label_without_trailing_colon] = region
+            log.verbose("label '{}' points to region {}".format(first_instruction.label, region.uid))
+
+    # now go through each ir node and work out what its 'children' (exits) are (where could execution go next?)
+    for index in range(len(regions)):
+        after = regions[index+1:]
+        current = regions[index]
+
+        # if it's a jump instruction then it can only go to its jump target
+        if is_jump_instruction(current.instructions[-1]):
+            target_label = current.instructions[-1].args[0]
+            target = label_to_region.get(target_label, None)
+
+            if target is None:
+                issues.error(current.instructions[-1].source_pos, "jump to non-existent label '{}'", target_label)
+            else:
+                current.exits[UNCONDITIONAL] = target
+                target.incoming.append(current)
+        # if its a test then it has to go to the first positive/negatively flagged instruction,
+        # or, the next unconditional, whichever occurs first
+        elif node_contains_test(current):
+            first_positive_condition = None
+            first_negative_condition = None
+            first_unconditional = None
+
+            for inner_region in after:
+                if first_positive_condition is None and inner_region.instructions[0].condition == '+':
+                    first_positive_condition = inner_region
+                elif first_negative_condition is None and inner_region.instructions[0].condition == '-':
+                    first_negative_condition = inner_region
+                elif first_unconditional is None and inner_region.instructions[0].condition is None:
+                    first_unconditional = inner_region
+                    break
+
+                if None not in (first_positive_condition, first_negative_condition):
+                    break
+
+            if first_positive_condition is not None:
+                current.exits[TRUE_CONDITIONAL] = first_positive_condition
+                first_positive_condition.incoming.append(current)
+            elif first_unconditional is not None:
+                current.exits[TRUE_CONDITIONAL] = first_unconditional
+                first_unconditional.incoming.append(current)
+            if first_negative_condition is not None:
+                current.exits[FALSE_CONDITIONAL] = first_negative_condition
+                first_negative_condition.incoming.append(current)
+            elif first_unconditional is not None:
+                current.exits[FALSE_CONDITIONAL] = first_unconditional
+                first_unconditional.incoming.append(current)
+        # if it is a generic conditional instruction then it has to connect to either the _next_ conditional
+        # in the chain (of the same sign!), or it has to merge execution back into the next unconditional
+        elif current.instructions[0].condition is not None:
+            next_region = None
+
+            for inner_region in after:
+                if inner_region.instructions[0].condition is None:
+                    next_region = inner_region
+                    break
+                if inner_region.instructions[0].condition == current.instructions[0].condition:
+                    next_region = inner_region
+                    break
+
+            if next_region is not None:
+                current.exits[UNCONDITIONAL] = next_region
+                next_region.incoming.append(current)
+        # otherwise if this is just an unconditional node, it will just connect to any next node
+        elif len(after) > 0:
+            next_region = after[0]
+            current.exits[UNCONDITIONAL] = next_region
+            next_region.incoming.append(current)
+
+    return regions
+
+
+def output_ir_dotfile(path, ir_nodes):
+    dotfile = open(path, 'w')
+
+    def dot(x, *args):
+        dotfile.write(x.format(*args) + "\n")
+
+    def node2name(node):
+        return "node{}".format(
+            str(node.uid).replace("-", "")
+        )
+
+    black = "black"
+    unconditional_colour = "#bae1ff"
+    true_colour = "#baffc9"
+    false_colour = "#ffb3ba"
+    jump_colour = "#ffdfba"
+    test_colour = "#ffffba"
+
+    dot("digraph prof {{")
+    dot("  ratio = fill;")
+    dot("  node [style=filled];")
+    dot("")
+    dot("  ENTRY -> {};", node2name(ir_nodes[0]))
+    for region in ir_nodes:
+        for transition_type, target in region.exits.items():
+            colour = black
+            label = ""
+            if transition_type is not None:
+                if transition_type == "+":
+                    colour = true_colour
+                    label = "true"
+                else:
+                    colour = false_colour
+                    label = "false"
+            elif is_jump_instruction(region.instructions[-1]):
+                colour = jump_colour
+            dot("  {} -> {} [label=\"{}\" color=\"{}\"];".format(
+                node2name(region),
+                node2name(target),
+                label,
+                colour
+            ))
+
+    dot("")
+
+    dot("  ENTRY;")
+    for region in ir_nodes:
+        colour = unconditional_colour
+        if is_jump_instruction(region.instructions[-1]):
+            colour = jump_colour
+        elif node_contains_test(region):
+            colour = test_colour
+        elif region.instructions[0].condition is not None:
+            if region.instructions[0].condition == "+":
+                colour = true_colour
+            else:
+                colour = false_colour
+        dot("  {} [label=\"{}\" color=\"{}\" shape=rectangle labeljust=l];".format(
+            node2name(region),
+            "\\l".join(map(str, region.instructions)) + "\\l",
+            colour
+        ))
+    dot("}}")
+
+
+def warn_unused_code(issues, ir_nodes):
+    entry_node = ir_nodes[0]
+    for node in ir_nodes[1:]:
+        to_check = [] + node.incoming
+        orphaned = True
+        while len(to_check) > 0:
+            ancestor = to_check.pop(0)
+            if ancestor is entry_node:
+                orphaned = False
+                break
+            to_check.extend(ancestor.incoming)
+        if orphaned:
+            issues.warning(
+                node.instructions[0].source_pos,
+                "unreachable instructions between lines {} and {}?",
+                node.instructions[0].source_pos.line,
+                node.instructions[-1].source_pos.line
+            )
+
+
+def node_contains_test(node: IntermediateNode):
+    return any(map(is_test_instruction, node.instructions))
+
+
+def is_test_instruction(instruction):
+    return instruction.mnemonic in (CHIP_OP_TEQ, CHIP_OP_TGT, CHIP_OP_TLT, CHIP_OP_TCP)
+
+
+def is_jump_instruction(instruction):
+    return instruction.mnemonic in (CHIP_OP_JMP,)
+
+
+def opposite_branch_sign_of(sign):
+    return {
+        TRUE_CONDITIONAL: FALSE_CONDITIONAL,
+        FALSE_CONDITIONAL: TRUE_CONDITIONAL,
+    }[sign]
