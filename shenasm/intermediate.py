@@ -30,6 +30,22 @@ class IntermediateNode(object):
     def last_instruction(self):
         return self.instructions[-1]
 
+    def is_orphan(self, entry_node):
+        orphaned = False
+
+        if self is not entry_node:
+            orphaned = True
+
+            to_check = [] + self.incoming
+            while len(to_check) > 0:
+                ancestor = to_check.pop(0)
+                if ancestor is entry_node:
+                    orphaned = False
+                    break
+                to_check.extend(ancestor.incoming)
+
+        return orphaned
+
     @staticmethod
     def create_child_of(incoming: ['IntermediateNode'], exit_key: str, instructions: [Instruction]):
         result = IntermediateNode(incoming, instructions)
@@ -165,7 +181,7 @@ def output_ir_dotfile(path, ir_nodes):
     true_colour = "#baffc9"
     false_colour = "#ffb3ba"
     jump_colour = "#ffdfba"
-    test_colour = "#ffffba"
+    orphan_colour = "#eeeeee"
 
     dot("digraph prof {{")
     dot("  ratio = fill;")
@@ -185,6 +201,8 @@ def output_ir_dotfile(path, ir_nodes):
                     label = "false"
             elif is_jump_instruction(region.instructions[-1]):
                 colour = jump_colour
+            if region.is_orphan(ir_nodes[0]):
+                colour = orphan_colour
             dot("  {} -> {} [label=\"{}\" color=\"{}\"];".format(
                 node2name(region),
                 node2name(target),
@@ -197,10 +215,10 @@ def output_ir_dotfile(path, ir_nodes):
     dot("  ENTRY;")
     for region in ir_nodes:
         colour = unconditional_colour
-        if is_jump_instruction(region.instructions[-1]):
+        if region.is_orphan(ir_nodes[0]):
+            colour = orphan_colour
+        elif is_jump_instruction(region.instructions[-1]):
             colour = jump_colour
-        elif node_contains_test(region):
-            colour = test_colour
         elif region.instructions[0].condition is not None:
             if region.instructions[0].condition == "+":
                 colour = true_colour
@@ -217,15 +235,7 @@ def output_ir_dotfile(path, ir_nodes):
 def warn_unused_code(issues, ir_nodes):
     entry_node = ir_nodes[0]
     for node in ir_nodes[1:]:
-        to_check = [] + node.incoming
-        orphaned = True
-        while len(to_check) > 0:
-            ancestor = to_check.pop(0)
-            if ancestor is entry_node:
-                orphaned = False
-                break
-            to_check.extend(ancestor.incoming)
-        if orphaned:
+        if node.is_orphan(entry_node):
             issues.warning(
                 node.instructions[0].source_pos,
                 "unreachable instructions between lines {} and {}?",
