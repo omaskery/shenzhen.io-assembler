@@ -1,3 +1,4 @@
+import itertools
 import typing
 
 
@@ -63,8 +64,7 @@ class Parser(object):
         :return: the resulting instruction list
         """
         return list(
-            filter(
-                lambda x: x is not None,
+            itertools.chain.from_iterable(
                 map(
                     self._parse_line,
                     lines
@@ -72,7 +72,7 @@ class Parser(object):
             )
         )
 
-    def _parse_line(self, line: LineOfSource) -> typing.Optional[Instruction]:
+    def _parse_line(self, line: LineOfSource) -> [Instruction]:
         """
         parses a single line into an assembly instruction
         :param line: the line to parse
@@ -89,7 +89,7 @@ class Parser(object):
 
         # empty lines don't need parsing
         if not text:
-            return None
+            return []
 
         # parse by spaces, the list comprehension is to remove empty strings when double spacing etc is used
         tokens = [token for token in text.split(" ") if token]
@@ -113,4 +113,12 @@ class Parser(object):
                 "condition symbol '{}' found with no associated instruction?",
                 condition
             )
-        return Instruction(line.pos, label, condition, mnemonic, args)
+
+        result = [Instruction(line.pos, label, condition, mnemonic, args)]
+        if label is not None and mnemonic is not None:
+            result = [
+                Instruction(line.pos, label, None, None, None),
+                Instruction(line.pos, None, condition, mnemonic, args),
+            ]
+
+        return result

@@ -22,6 +22,14 @@ class IntermediateNode(object):
         self.instructions = instructions if instructions is not None else []
         self.exits = exits if exits is not None else {}
 
+    @property
+    def first_instruction(self):
+        return self.instructions[0]
+
+    @property
+    def last_instruction(self):
+        return self.instructions[-1]
+
     @staticmethod
     def create_child_of(incoming: ['IntermediateNode'], exit_key: str, instructions: [Instruction]):
         result = IntermediateNode(incoming, instructions)
@@ -41,17 +49,17 @@ def build_ir_graph(issues: IssueLog, instructions: [Instruction]):
         if len(regions) < 1:
             regions.append(IntermediateNode([instruction], creation_reason="first"))
         else:
-            if is_jump_instruction(regions[-1].instructions[-1]):
+            if is_jump_instruction(regions[-1].last_instruction):
                 regions.append(IntermediateNode([instruction], creation_reason="last instruction was a jump"))
-            elif instruction.condition is None and (instruction.label is not None or regions[-1].instructions[-1].condition is not None):
+            elif instruction.condition is None and (instruction.label is not None or regions[-1].last_instruction.condition is not None):
                 if instruction.label is not None:
                     regions.append(IntermediateNode([instruction], creation_reason="starts with label"))
-                elif regions[-1].instructions[-1].condition is not None:
+                elif regions[-1].last_instruction.condition is not None:
                     regions.append(IntermediateNode([instruction], creation_reason="unconditional after conditional"))
             elif instruction.condition is not None:
-                if is_test_instruction(regions[-1].instructions[-1]):
+                if is_test_instruction(regions[-1].last_instruction):
                     regions.append(IntermediateNode([instruction], creation_reason="last instruction was a test"))
-                elif instruction.condition != regions[-1].instructions[-1].condition:
+                elif instruction.condition != regions[-1].last_instruction.condition:
                     regions.append(IntermediateNode([instruction], creation_reason="different conditional to last conditional"))
                 else:
                     regions[-1].instructions.append(instruction)
@@ -61,7 +69,7 @@ def build_ir_graph(issues: IssueLog, instructions: [Instruction]):
     # go through and record what labels point to what nodes in our intermediate graph
     #   we should have orchestrated it so that all labels are the first instruction of a node
     for region in regions:
-        first_instruction = region.instructions[0]
+        first_instruction = region.first_instruction
         if first_instruction.label is not None:
             label_without_trailing_colon = first_instruction.label[:-1]
             label_to_region[label_without_trailing_colon] = region
@@ -72,7 +80,7 @@ def build_ir_graph(issues: IssueLog, instructions: [Instruction]):
         after = regions[index+1:]
         current = regions[index]
 
-        # if it's a jump instruction then it can only go to its jump target
+        # jump instructions are treated specially, they always just go where they say
         if is_jump_instruction(current.instructions[-1]):
             target_label = current.instructions[-1].args[0]
             target = label_to_region.get(target_label, None)
@@ -82,58 +90,61 @@ def build_ir_graph(issues: IssueLog, instructions: [Instruction]):
             else:
                 current.exits[UNCONDITIONAL] = target
                 target.incoming.append(current)
-        # if its a test then it has to go to the first positive/negatively flagged instruction,
-        # or, the next unconditional, whichever occurs first
-        elif node_contains_test(current):
+        # every other instruction will go to whatever next instruction makes sense based on
+        # the current and subsequent instructions' condition flags
+        else:
             first_positive_condition = None
             first_negative_condition = None
             first_unconditional = None
 
+            # there can only be a positive branch if we aren't in a negative branch, because by definition we know
+            # the test register is negative in that case, UNLESS the instruction is a test!
+            can_branch_positive = current.first_instruction.condition != '-' or is_test_instruction(current.first_instruction)
+            # there can only be a negative branch if we aren't in a positive branch, because by definition we know
+            # the test register is positive in that case, UNLESS the instruction is a test!
+            can_branch_negative = current.first_instruction.condition != '+' or is_test_instruction(current.first_instruction)
+
+            # find the first positive and negative conditional instructions, but stop looking if you find
+            # an unconditional instruction first.
             for inner_region in after:
-                if first_positive_condition is None and inner_region.instructions[0].condition == '+':
+                # only look for positive conditional instructions if we can branch positively and haven't found one yet
+                if can_branch_positive and first_positive_condition is None and inner_region.first_instruction.condition == '+':
                     first_positive_condition = inner_region
-                elif first_negative_condition is None and inner_region.instructions[0].condition == '-':
+                # only look for negative conditional instructions if we can branch negatively and haven't found one yet
+                elif can_branch_negative and first_negative_condition is None and inner_region.first_instruction.condition == '-':
                     first_negative_condition = inner_region
-                elif first_unconditional is None and inner_region.instructions[0].condition is None:
+                # if we find an unconditional instruction stop
+                elif inner_region.first_instruction.condition is None:
                     first_unconditional = inner_region
                     break
 
+                # if we've found both a positive and negative conditional instruction then we can stop
                 if None not in (first_positive_condition, first_negative_condition):
                     break
 
-            if first_positive_condition is not None:
-                current.exits[TRUE_CONDITIONAL] = first_positive_condition
-                first_positive_condition.incoming.append(current)
-            elif first_unconditional is not None:
-                current.exits[TRUE_CONDITIONAL] = first_unconditional
-                first_unconditional.incoming.append(current)
-            if first_negative_condition is not None:
-                current.exits[FALSE_CONDITIONAL] = first_negative_condition
-                first_negative_condition.incoming.append(current)
-            elif first_unconditional is not None:
-                current.exits[FALSE_CONDITIONAL] = first_unconditional
-                first_unconditional.incoming.append(current)
-        # if it is a generic conditional instruction then it has to connect to either the _next_ conditional
-        # in the chain (of the same sign!), or it has to merge execution back into the next unconditional
-        elif current.instructions[0].condition is not None:
-            next_region = None
+            # identify what regions we can branch to based on our search
+            true_target, false_target = None, None
+            if can_branch_positive:
+                true_target = first_positive_condition if first_positive_condition is not None else first_unconditional
+            if can_branch_negative:
+                false_target = first_negative_condition if first_negative_condition is not None else first_unconditional
 
-            for inner_region in after:
-                if inner_region.instructions[0].condition is None:
-                    next_region = inner_region
-                    break
-                if inner_region.instructions[0].condition == current.instructions[0].condition:
-                    next_region = inner_region
-                    break
-
-            if next_region is not None:
-                current.exits[UNCONDITIONAL] = next_region
-                next_region.incoming.append(current)
-        # otherwise if this is just an unconditional node, it will just connect to any next node
-        elif len(after) > 0:
-            next_region = after[0]
-            current.exits[UNCONDITIONAL] = next_region
-            next_region.incoming.append(current)
+            # if our true and false targets are the same, it's by definition unconditional!
+            if true_target is false_target and true_target is not None:
+                current.exits[UNCONDITIONAL] = true_target
+                true_target.incoming.append(current)
+            # we might have conditional branches, so try and connect up the true and false branches to their targets
+            else:
+                if true_target is not None:
+                    # if there isn't a false target, then this is actually unconditional
+                    condition = TRUE_CONDITIONAL if false_target is not None else UNCONDITIONAL
+                    current.exits[condition] = true_target
+                    true_target.incoming.append(current)
+                if false_target is not None:
+                    # if there isn't a true target, then this is actually unconditional
+                    condition = FALSE_CONDITIONAL if true_target is not None else UNCONDITIONAL
+                    current.exits[condition] = false_target
+                    false_target.incoming.append(current)
 
     return regions
 
