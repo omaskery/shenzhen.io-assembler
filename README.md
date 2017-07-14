@@ -6,11 +6,15 @@ an awesome programming game released recently by Zachtronics.
 
 WARNING: The source contains *mild spoilers!* :) You have been warned!
 
+Now features _unnecessarily_ pretty graphviz output using the new --dotfile argument!
+
 # Usage
 
 ```bash
 > .\run_shenasm.py -h
-usage: run_shenasm.py [-h] [-o OUTPUT] [-c {MC6000,MC4000,MC4000X}] [-v] input
+usage: run_shenasm.py [-h] [-o OUTPUT] [-c {MC6000,MC4000,MC4000X}] [-v]
+                      [--dotfile DOTFILE]
+                      input
 
 simple assembler/compiler for making it easier to write SHENZHEN.IO programs
 
@@ -24,6 +28,8 @@ optional arguments:
   -c {MC6000,MC4000,MC4000X}, --chip {MC6000,MC4000,MC4000X}
                         inform assembler of target chip for better diagnostics
   -v, --verbose         flag to cause more verbose output during execution
+  --dotfile DOTFILE     write a graphviz compatible .dot file containing the
+                        intermediate representation graph of the input
 ```
 
 ## Example: Pulse Generator
@@ -80,11 +86,16 @@ There is currently only one supported directive:
 - [ ] Verify types of instruction arguments
 - [ ] Verify register references exist on selected chip
 - [x] Warn about exceeding memory space limitations of selected chip
+- [x] Generate intermediate representation (IR) graph of input program
+  - [x] Detect unused code (possibly not?)
+  - [ ] Tidy up IR graph by merging consecutive conditional nodes
+  - [ ] Maybe replace jump instructions with edges in IR graph?
+  - [ ] Make assembler generate output FROM IR graph instead?
+  - [ ] Add compiler flag to automatically remove unused code
+- [ ] Detect and remove redundant labels?
 - [ ] Basic optimisation (probably not?)
-- [x] Detect unused code (possibly not?)
 - [ ] Detect unused aliases/constants?
 - [x] Compress label names
-- [ ] Detect and remove redundant labels?
 - [x] Error on redefinitions of alias/const names
 - [x] Add support for including other files textually (preprocessor style)
 - [x] Improve error reporting to use source file and source line
